@@ -380,6 +380,9 @@ namespace ts {
     export const ignoredPaths = ["/node_modules/.", "/.git", "/.#"];
 
     /*@internal*/
+    export let sysLog: (s: string) => void = noop;
+
+    /*@internal*/
     export interface RecursiveDirectoryWatcherHost {
         watchDirectory: HostWatchDirectory;
         useCaseSensitiveFileNames: boolean;
@@ -416,6 +419,8 @@ namespace ts {
          * Create the directory watcher for the dirPath.
          */
         function createDirectoryWatcher(dirName: string, callback?: DirectoryWatcherCallback): ChildDirectoryWatcher {
+            if (callback) sysLog(`sysLog:: Start:: creating recursiveDirectoryWatch: ${dirName}`);
+            const start = timestamp();
             const dirPath = toCanonicalFilePath(dirName) as Path;
             let directoryWatcher = cache.get(dirPath);
             if (directoryWatcher) {
@@ -446,6 +451,8 @@ namespace ts {
             if (callback) {
                 callbackCache.add(dirPath, callback);
             }
+            const elapsed = timestamp() - start;
+            if (callback) sysLog(`sysLog:: Finished:: creating recursiveDirectoryWatch: ${dirName}, Elapsed: ${elapsed}ms`);
 
             return {
                 dirName,
@@ -1053,6 +1060,7 @@ namespace ts {
                  * @param createWatcher
                  */
                 function invokeCallbackAndUpdateWatcher(createWatcher: () => FileWatcher) {
+                    sysLog(`sysLog:: ${fileOrDirectory}:: Changing watcher to ${createWatcher === watchPresentFileSystemEntry ? "Present" : "Missing"}FileSystemEntryWatcher`);
                     // Call the callback for current directory
                     callback("rename", "");
 
@@ -1115,6 +1123,7 @@ namespace ts {
                  * Eg. on linux the number of watches are limited and one could easily exhaust watches and the exception ENOSPC is thrown when creating watcher at that point
                  */
                 function watchPresentFileSystemEntryWithFsWatchFile(): FileWatcher {
+                    sysLog(`sysLog:: ${fileOrDirectory}:: Changing to fsWatchFile`);
                     return fallbackPollingWatchFile(fileOrDirectory, createFileWatcherCallback(callback), pollingInterval);
                 }
 
