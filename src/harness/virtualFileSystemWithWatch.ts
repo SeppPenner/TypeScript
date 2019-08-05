@@ -377,9 +377,8 @@ interface Array<T> {}`
                 this.customRecursiveWatchDirectory = createRecursiveDirectoryWatcher({
                     useCaseSensitiveFileNames: this.useCaseSensitiveFileNames,
                     directoryExists: path => this.directoryExists(path),
-                    getAccessibleSortedChildDirectories: path => this.getDirectories(path),
+                    getAccessibleSortedNonSymbolicChildDirectories: path => this.getNonSymbolicDirectories(path),
                     watchDirectory,
-                    realpath: s => this.realpath(s)
                 });
             }
             else if (tscWatchDirectory === Tsc_WatchDirectory.NonRecursiveWatchDirectory) {
@@ -387,9 +386,8 @@ interface Array<T> {}`
                 this.customRecursiveWatchDirectory = createRecursiveDirectoryWatcher({
                     useCaseSensitiveFileNames: this.useCaseSensitiveFileNames,
                     directoryExists: path => this.directoryExists(path),
-                    getAccessibleSortedChildDirectories: path => this.getDirectories(path),
+                    getAccessibleSortedNonSymbolicChildDirectories: path => this.getNonSymbolicDirectories(path),
                     watchDirectory,
-                    realpath: s => this.realpath(s)
                 });
             }
             else if (tscWatchDirectory === Tsc_WatchDirectory.DynamicPolling) {
@@ -398,9 +396,8 @@ interface Array<T> {}`
                 this.customRecursiveWatchDirectory = createRecursiveDirectoryWatcher({
                     useCaseSensitiveFileNames: this.useCaseSensitiveFileNames,
                     directoryExists: path => this.directoryExists(path),
-                    getAccessibleSortedChildDirectories: path => this.getDirectories(path),
+                    getAccessibleSortedNonSymbolicChildDirectories: path => this.getNonSymbolicDirectories(path),
                     watchDirectory,
-                    realpath: s => this.realpath(s)
                 });
             }
         }
@@ -824,6 +821,16 @@ interface Array<T> {}`
             }
             Debug.fail(folder ? "getDirectories called on file" : "getDirectories called on missing folder");
             return [];
+        }
+
+        getNonSymbolicDirectories(s: string): readonly string[] {
+            const path = this.toFullPath(s);
+            const folder = this.getRealFolder(path);
+            if (folder) {
+                return mapDefined(folder.entries, entry => isFsFolder(entry) ? getBaseFileName(entry.fullPath) : undefined);
+            }
+            Debug.fail(folder ? "getNonSymbolicDirectories called on file" : "getNonSymbolicDirectories called on missing folder");
+            return emptyArray;
         }
 
         readDirectory(path: string, extensions?: ReadonlyArray<string>, exclude?: ReadonlyArray<string>, include?: ReadonlyArray<string>, depth?: number): string[] {

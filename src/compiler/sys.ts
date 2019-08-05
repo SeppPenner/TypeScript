@@ -386,9 +386,10 @@ namespace ts {
     export interface RecursiveDirectoryWatcherHost {
         watchDirectory: HostWatchDirectory;
         useCaseSensitiveFileNames: boolean;
-        getAccessibleSortedChildDirectories(path: string): ReadonlyArray<string>;
+        // Filter our the symbolic link directories since those arent included in recursive watch
+        // which is same behaviour when recursive: true is passed to fs.watch
+        getAccessibleSortedNonSymbolicChildDirectories(path: string): ReadonlyArray<string>;
         directoryExists(dir: string): boolean;
-        realpath(s: string): string;
     }
 
     /**
@@ -484,11 +485,9 @@ namespace ts {
         function watchChildDirectories(parentDir: string, existingChildWatches: ChildWatches): ChildWatches {
             let newChildWatches: ChildDirectoryWatcher[] | undefined;
             enumerateInsertsAndDeletes<string, ChildDirectoryWatcher>(
-                host.directoryExists(parentDir) ? mapDefined(host.getAccessibleSortedChildDirectories(parentDir), child => {
+                host.directoryExists(parentDir) ? mapDefined(host.getAccessibleSortedNonSymbolicChildDirectories(parentDir), child => {
                     const childFullName = getNormalizedAbsolutePath(child, parentDir);
-                    // Filter our the symbolic link directories since those arent included in recursive watch
-                    // which is same behaviour when recursive: true is passed to fs.watch
-                    return !isIgnoredPath(childFullName) && filePathComparer(childFullName, normalizePath(host.realpath(childFullName))) === Comparison.EqualTo ? childFullName : undefined;
+                    return !isIgnoredPath(childFullName) ? childFullName : undefined;
                 }) : emptyArray,
                 existingChildWatches,
                 (child, childWatcher) => filePathComparer(child, childWatcher.dirName),
@@ -910,9 +909,8 @@ namespace ts {
                 const watchDirectoryRecursively = createRecursiveDirectoryWatcher({
                     useCaseSensitiveFileNames,
                     directoryExists,
-                    getAccessibleSortedChildDirectories: path => getAccessibleFileSystemEntries(path).directories,
-                    watchDirectory,
-                    realpath
+                    getAccessibleSortedNonSymbolicChildDirectories: path => getAccessibleNonSymbolicDirectories(path),
+                    watchDirectory
                 });
 
                 return (directoryName, callback, recursive) => {
@@ -1208,6 +1206,37 @@ namespace ts {
                     if (fd !== undefined) {
                         _fs.closeSync(fd);
                     }
+                }
+            }
+
+            function getAccessibleNonSymbolicDirectories(path: string): readonly string[] {
+                try {
+                    const entries = _fs.readdirSync(path || ".").sort();
+                    const directories: string[] = [];
+                    for (const entry of entries) {
+                        // This is necessary because on some file system node fails to exclude
+                        // "." and "..". See https://github.com/nodejs/node/issues/4002
+                        if (entry === "." || entry === "..") {
+                            continue;
+                        }
+                        const name = combinePaths(path, entry);
+
+                        let stat: any;
+                        try {
+                            stat = _fs.lstatSync(name);
+                        }
+                        catch (e) {
+                            continue;
+                        }
+
+                        if (stat.isDirectory() && !stat.isSymbolicLink()) {
+                            directories.push(entry);
+                        }
+                    }
+                    return directories;
+                }
+                catch (e) {
+                    return emptyArray;
                 }
             }
 
